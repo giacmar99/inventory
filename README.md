@@ -1,5 +1,5 @@
 # inventory
-Pipeline of inventory for country and sites with controll for deep diving
+Pipeline of inventory for country and sites with control for deep diving
 <p style="text-align: center;"><strong>INVENTORY DEEP DIVE</strong></p>
 <p style="text-align: left;">This project has been created to have complete check control of the inventory present in the countries and warehouses.</p>
 <p style="text-align: left;">The data is sourced with a SQL query directly from the Data Lake which is automatically refreshed every Monday.</p>
