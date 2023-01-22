@@ -1,6 +1,10 @@
-# inventory
+# INVENTORY DEEP DIVE
 Pipeline of inventory for country and sites with control for deep diving
-<p style="text-align: center;"><strong>INVENTORY DEEP DIVE</strong></p>
+<p>Tool used:</p>
+<ul>
+    <li>SQL</li>
+    <li>Quicksight</li>
+</ul>
 <p style="text-align: left;">This project has been created to have complete check control of the inventory present in the countries and warehouses.</p>
 <p style="text-align: left;">The data is sourced with a SQL query directly from the Data Lake which is automatically refreshed every Monday.</p>
 <p style="text-align: left;">The controls at the top give us the possibility to deep dive into different kinds of items and different granularity(ex: countries and warehouses).</p>
