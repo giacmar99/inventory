@@ -1,0 +1,178 @@
+/*returning inventory with items owner*/
+WITH Table_inventory AS
+	(
+		SELECT
+		
+        ilbo.item,
+    	Ilbo.sku,
+        ilbo.site,
+        ilbo.group_id,
+        ilbo.inventory_condition_code,
+    	TO_CHAR(DATEADD(DAY,1,ilbo.snapshot_day), 'IYYYIW') AS week,
+        SUM(ilbo.quantity) AS units
+		
+		FROM dbs.inv_own ilbo
+        
+		WHERE ilbo.region_id = 'EU'
+		/*returning historical data*/
+        AND  ilbo.snapshot IN 
+		(
+          TO_DATE(getdate(), 'YYYY/MM/DD')-1,
+          TO_DATE(getdate(), 'YYYY/MM/DD')-8,
+          TO_DATE(getdate(), 'YYYY/MM/DD')-15,
+          TO_DATE(getdate(), 'YYYY/MM/DD')-22,
+          TO_DATE(getdate(), 'YYYY/MM/DD')-29,
+          TO_DATE(getdate(), 'YYYY/MM/DD')-36,
+          TO_DATE(getdate(), 'YYYY/MM/DD')-43,
+          TO_DATE(getdate(), 'YYYY/MM/DD')-50,
+		)
+		/*consider current year and year-1*/
+		AND  (date_part(year, ilbo.snapshot) = date_part(year, getdate()) - 1 OR date_part(year, ilbo.snapshot) = date_part(year, getdate()) )
+        AND  ilbo.site IN ('DFR1','DFR5','DE78', 'DE21', 'XD14', 'XD72', 'XBER','UKSA', 'LT62', 'XG32', 'RE32', 'SW78', 'XITJ', 'RE34','AS21', 'SA54', 'BC32')
+        AND  ilbo.on_hand _quantity > 0
+		
+		GROUP BY 1,2,3,4,5,6,7,8
+	),
+	
+	/*list of owner code*/
+IOG_mapping AS
+	(
+		SELECT group_id, is_retail
+		
+		FROM map.owner
+		
+		GROUP BY 1,2
+	),
+	
+	/*returning type of items*/
+Sort_table as
+	(
+    	SELECT
+		
+        CS.item,
+        CS.marketplace_id,
+        CS.weight_gr,
+		/*returning longest, medium and minimum side*/
+        GREATEST(CS.length_cm, CS.width_cm, CS.height_cm) AS max_length,
+        CASE 
+            WHEN  CS.length_cm between CS.width_cm AND  CS.height_cm OR CS.length_cm between CS.height_cm AND  CS.width_cm THEN CS.length_cm
+            WHEN  CS.width_cm between CS.length_cm AND  CS.height_cm OR CS.width_cm between CS.height_cm AND  CS.length_cm THEN CS.width_cm
+            WHEN  CS.height_cm between CS.length_cm AND  CS.width_cm OR CS.height_cm between CS.width_cm AND  CS.length_cm THEN CS.height_cm
+            ELSE -1
+        END AS med_length,
+		LEAST(CS.length_cm, CS.width_cm, CS.height_cm) AS max_length AS min_length,
+        CASE 
+            WHEN  number_of_boxes > 1 THEN 'MB'
+            ELSE 'SB'
+        END AS MB_SB,
+        2 *(CS.length_cm + CS.width_cm + CS.height_cm) - max_length AS Girth,
+        CS.cube_cuft * 0.283 AS m3,
+		SortType
+		
+        FROM
+        eudl.sort CS
+		
+        WHERE
+        CS.marketplace_id IN ('DE','UK','FR','IT','ES')
+    	AND  item IN (SELECT item FROM Table_inventory GROUP BY 1)
+	),
+	
+	
+MAW AS 
+	(
+		SELECT 
+		
+		DMAWC.item,
+		DMAWC.gl ,
+		DMAM.manufacturer
+		DMAWC.description,
+		DMAWC.marketplace_id,
+		DMAWC.region_id,
+		DMAWC.category_description,
+		
+		FROM 
+		dl.class	
+			
+		WHERE
+		
+		DMAWC.region_id= 'EU'
+		AND  DMAWC.marketplace_id IN ('DE','UK','FR','IT','ES')
+		AND  DMAWC.item IN (SELECT item FROM Table_inventory GROUP BY 1)
+	),
+	
+	
+    SELECT
+	
+    ilbo.item,
+    ilbo.week,
+    ilbo.sku,
+    CASE
+        WHEN  ilbo.site IN ('DFR1', 'DFR5') AND  Sort_table.SortType IN ('HB','HNS','LPTL','20kg to 23kg') THEN Sort_table.SortType
+        WHEN  ilbo.site IN ('DE78', 'DE21', 'XD14', 'XD72', 'XBER','UKSA', 'LT62', 'XG32', 'RE32', 'SW78', 'XITJ', 'RE34','AS21', 'SA54', 'BC32') AND  Sort_table.SortType IN ('HB','HNS','LPTL') THEN Sort_table.SortType
+        ELSE 'not_amxl'
+    END AS AMXL_SORT,
+	/*calculation for type of storage*/
+    CASE
+        WHEN  Sort_table.MB_SB = 'MB' THEN 'Stillage'
+        WHEN  Sort_table.weight_gr < 1102 * 453.592 AND  Sort_table.max_length < 70.8 * 2.54 AND  Sort_table.med_length < 48 * 2.54 AND  Sort_table.min_length < 32 * 2.54 THEN 'rack'
+        WHEN  Sort_table.weight_gr < 140 * 453.592 AND  Sort_table.max_length < 140 * 2.54 AND  Sort_table.med_length < 48 * 2.54 AND  Sort_table.min_length < 24 * 2.54 THEN 'rack'
+        ELSE 'bulk'
+    END AS rack_bulk,
+    ilbo.site,
+    ilbo.inventory_condition_code,
+    coalesce(MAW.description,'Other') AS description,
+    MAW.category_description,
+    MAW.wbr_manufacturer_name,
+	Sort_table.SortType AS sort_type,
+    CASE WHEN  ilbo.site IN ('DE78','XD14','XD72', 'XBER','DE21') THEN 'DE' 
+        WHEN  ilbo.site IN ('AS21', 'BC32','SA54') THEN 'ES'
+        WHEN  ilbo.site IN ('DFR1','DFR5') THEN 'FR'
+        WHEN  ilbo.site IN ('RE34','XITJ','SW78') THEN 'IT'
+        WHEN  ilbo.site IN ('XG32','LT62','UKSA','RE32') THEN 'UK' ELSE 'other' 
+    END AS Country,
+    CASE WHEN  IOG.is_retail='Y' OR FMM.merchant_customer_id IS NULL THEN 'RETAIL' ELSE 'FBA' end AS Owner,
+    ilbo.group_id,
+    CASE
+        WHEN  ilbo.group_id IN (13, 14, 15, 16, 17) THEN 'TIP'
+        ELSE 'normal'
+    END AS LPN,
+    Sort_table.m3,
+    Sort_table.m3 * ilbo.units AStot_volume,
+    ilbo.units,
+    Sort_table.MB_SB,
+	/*getting possible filter for current week and week-4 considering when the 4 weeks are between 2 years and when they are not*/
+	CASE 
+		WHEN   cast(substring(TO_CHAR(DATEADD(DAY,1,getdate()), 'IYYYIW'),5,2) AS int) IN (01,02,03,04,05,06,07,08,09)
+		AND 
+		(
+			cast(ilbo.week AS int) = (SELECT max(cast(ilbo.week AS int)) FROM Table_inventory ilbo) OR  ilbo.week = (SELECT max(cast(ilbo.week AS int)) - (4+48) FROM Table_inventory ilbo) 
+		) THEN 'mm_week'
+		WHEN  cast(ilbo.week AS int) = (SELECT max(cast(ilbo.week AS int)) FROM Table_inventory ilbo) OR  ilbo.week = (SELECT max(cast(ilbo.week AS int)) - 4 FROM Table_inventory ilbo) THEN 'mm_week'
+		ELSE 'none'
+	END ASmax_min_week_4
+
+    FROM Table_inventory ilbo
+
+    LEFT JOIN MAW
+    ON MAW.item = ilbo.item
+    AND  MAW.region_id = 'EU' AND  
+    CASE 
+        WHEN  ilbo.site IN ('DE78','XD14','XD72' , 'XBER' ,'DE21') THEN MAW.marketplace_id = 'DE'
+        WHEN  ilbo.site IN ('XG32', 'LT62','UKSA','RE32') THEN MAW.marketplace_id = 'UK'
+        WHEN  ilbo.site IN ('DFR1','DFR5') THEN MAW.marketplace_id = 'FR'
+        WHEN  ilbo.site IN ('RE34', 'XITJ','SW78') THEN MAW.marketplace_id = 'IT'
+        WHEN  ilbo.site IN ('AS21','BC32','SA54') THEN MAW.marketplace_id = 'ES'
+    END
+
+    LEFT JOIN IOG_mapping IOG
+    ON ilbo.group_id = IOG.group_id 
+    
+    LEFT JOIN Sort_table 
+    ON sort_table.item = ilbo.item AND 
+    CASE 
+        WHEN  ilbo.site IN ('DE78','XD14','XD72' , 'XBER' ,'DE21') THEN sort_table.marketplace_id = 'DE'
+        WHEN  ilbo.site IN ('XG32', 'LT62','UKSA','RE32') THEN sort_table.marketplace_id = 'UK'
+        WHEN  ilbo.site IN ('DFR1','DFR5') THEN sort_table.marketplace_id = 'FR'
+        WHEN  ilbo.site IN ('RE34', 'XITJ','SW78') THEN sort_table.marketplace_id = 'IT'
+        WHEN  ilbo.site IN ('AS21','BC32','PESG','SA54') THEN sort_table.marketplace_id = 'ES'
+    END
