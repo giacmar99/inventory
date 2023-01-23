@@ -3,19 +3,19 @@ WITH Table_inventory AS
 	(
 		SELECT
 		
-        ilbo.item,
-    	Ilbo.sku,
-        ilbo.site,
-        ilbo.group_id,
-        ilbo.inventory_condition_code,
-    	TO_CHAR(DATEADD(DAY,1,ilbo.snapshot_day), 'IYYYIW') AS week,
-        SUM(ilbo.quantity) AS units
+        ibow.item,
+    	ibow.sku,
+        ibow.site,
+        ibow.group_id,
+        ibow.inventory_condition_code,
+    	TO_CHAR(DATEADD(DAY,1,ibow.snapshot_day), 'IYYYIW') AS week,
+        SUM(ibow.quantity) AS units
 		
-		FROM dbs.inv_own ilbo
+		FROM dbs.inv_own ibow
         
-		WHERE ilbo.region_id = 'EU'
+		WHERE ibow.region_id = 'EU'
 		/*returning historical data*/
-        AND  ilbo.snapshot IN 
+        AND  ibow.snapshot IN 
 		(
           TO_DATE(getdate(), 'YYYY/MM/DD')-1,
           TO_DATE(getdate(), 'YYYY/MM/DD')-8,
@@ -27,9 +27,9 @@ WITH Table_inventory AS
           TO_DATE(getdate(), 'YYYY/MM/DD')-50,
 		)
 		/*consider current year and year-1*/
-		AND  (date_part(year, ilbo.snapshot) = date_part(year, getdate()) - 1 OR date_part(year, ilbo.snapshot) = date_part(year, getdate()) )
-        AND  ilbo.site IN ('DFR1','DFR5','DE78', 'DE21', 'XD14', 'XD72', 'XBER','UKSA', 'LT62', 'XG32', 'RE32', 'SW78', 'XITJ', 'RE34','AS21', 'SA54', 'BC32')
-        AND  ilbo.on_hand _quantity > 0
+		AND  (date_part(year, ibow.snapshot) = date_part(year, getdate()) - 1 OR date_part(year, ibow.snapshot) = date_part(year, getdate()) )
+        AND  ibow.site IN ('DFR1','DFR5','DE78', 'DE21', 'XD14', 'XD72', 'XBER','UKSA', 'LT62', 'XG32', 'RE32', 'SW78', 'XITJ', 'RE34','AS21', 'SA54', 'BC32')
+        AND  ibow.on_hand _quantity > 0
 		
 		GROUP BY 1,2,3,4,5,6,7,8
 	),
@@ -78,39 +78,39 @@ Sort_table as
 	),
 	
 	
-MAW AS 
+tita AS 
 	(
 		SELECT 
 		
-		DMAWC.item,
-		DMAWC.gl ,
-		DMAM.manufacturer
-		DMAWC.description,
-		DMAWC.marketplace_id,
-		DMAWC.region_id,
-		DMAWC.category_description,
+		cls.item,
+		cls.gl ,
+		cls.manufacturer
+		cls.description,
+		cls.marketplace_id,
+		cls.region_id,
+		cls.category_description,
 		
 		FROM 
-		dl.class	
+		dl.class cls	
 			
 		WHERE
 		
-		DMAWC.region_id= 'EU'
-		AND  DMAWC.marketplace_id IN ('DE','UK','FR','IT','ES')
-		AND  DMAWC.item IN (SELECT item FROM Table_inventory GROUP BY 1)
+		DtitaC.region_id= 'EU'
+		AND  DtitaC.marketplace_id IN ('DE','UK','FR','IT','ES')
+		AND  DtitaC.item IN (SELECT item FROM Table_inventory GROUP BY 1)
 	),
 	
 	
     SELECT
 	
-    ilbo.item,
-    ilbo.week,
-    ilbo.sku,
+    ibow.item,
+    ibow.week,
+    ibow.sku,
     CASE
-        WHEN  ilbo.site IN ('DFR1', 'DFR5') AND  Sort_table.SortType IN ('HB','HNS','LPTL','20kg to 23kg') THEN Sort_table.SortType
-        WHEN  ilbo.site IN ('DE78', 'DE21', 'XD14', 'XD72', 'XBER','UKSA', 'LT62', 'XG32', 'RE32', 'SW78', 'XITJ', 'RE34','AS21', 'SA54', 'BC32') AND  Sort_table.SortType IN ('HB','HNS','LPTL') THEN Sort_table.SortType
+        WHEN  ibow.site IN ('DFR1', 'DFR5') AND  Sort_table.SortType IN ('HB','HNS','LPTL','20kg to 23kg') THEN Sort_table.SortType
+        WHEN  ibow.site IN ('DE78', 'DE21', 'XD14', 'XD72', 'XBER','UKSA', 'LT62', 'XG32', 'RE32', 'SW78', 'XITJ', 'RE34','AS21', 'SA54', 'BC32') AND  Sort_table.SortType IN ('HB','HNS','LPTL') THEN Sort_table.SortType
         ELSE 'not_amxl'
-    END AS AMXL_SORT,
+    END AS XL_SORT,
 	/*calculation for type of storage*/
     CASE
         WHEN  Sort_table.MB_SB = 'MB' THEN 'Stillage'
@@ -118,61 +118,61 @@ MAW AS
         WHEN  Sort_table.weight_gr < 140 * 453.592 AND  Sort_table.max_length < 140 * 2.54 AND  Sort_table.med_length < 48 * 2.54 AND  Sort_table.min_length < 24 * 2.54 THEN 'rack'
         ELSE 'bulk'
     END AS rack_bulk,
-    ilbo.site,
-    ilbo.inventory_condition_code,
-    coalesce(MAW.description,'Other') AS description,
-    MAW.category_description,
-    MAW.wbr_manufacturer_name,
+    ibow.site,
+    ibow.inventory_condition_code,
+    coalesce(tita.description,'Other') AS description,
+    tita.category_description,
+    tita.wbr_manufacturer_name,
 	Sort_table.SortType AS sort_type,
-    CASE WHEN  ilbo.site IN ('DE78','XD14','XD72', 'XBER','DE21') THEN 'DE' 
-        WHEN  ilbo.site IN ('AS21', 'BC32','SA54') THEN 'ES'
-        WHEN  ilbo.site IN ('DFR1','DFR5') THEN 'FR'
-        WHEN  ilbo.site IN ('RE34','XITJ','SW78') THEN 'IT'
-        WHEN  ilbo.site IN ('XG32','LT62','UKSA','RE32') THEN 'UK' ELSE 'other' 
+    CASE WHEN  ibow.site IN ('DE78','XD14','XD72', 'XBER','DE21') THEN 'DE' 
+        WHEN  ibow.site IN ('AS21', 'BC32','SA54') THEN 'ES'
+        WHEN  ibow.site IN ('DFR1','DFR5') THEN 'FR'
+        WHEN  ibow.site IN ('RE34','XITJ','SW78') THEN 'IT'
+        WHEN  ibow.site IN ('XG32','LT62','UKSA','RE32') THEN 'UK' ELSE 'other' 
     END AS Country,
     CASE WHEN  IOG.is_retail='Y' OR FMM.merchant_customer_id IS NULL THEN 'RETAIL' ELSE 'FBA' end AS Owner,
-    ilbo.group_id,
+    ibow.group_id,
     CASE
-        WHEN  ilbo.group_id IN (13, 14, 15, 16, 17) THEN 'TIP'
+        WHEN  ibow.group_id IN (13, 14, 15, 16, 17) THEN 'TIP'
         ELSE 'normal'
     END AS LPN,
     Sort_table.m3,
-    Sort_table.m3 * ilbo.units AStot_volume,
-    ilbo.units,
+    Sort_table.m3 * ibow.units AStot_volume,
+    ibow.units,
     Sort_table.MB_SB,
-	/*getting possible filter for current week and week-4 considering when the 4 weeks are between 2 years and when they are not*/
+	/*getting possible filter for current week and week-4*/
 	CASE 
 		WHEN   cast(substring(TO_CHAR(DATEADD(DAY,1,getdate()), 'IYYYIW'),5,2) AS int) IN (01,02,03,04,05,06,07,08,09)
 		AND 
 		(
-			cast(ilbo.week AS int) = (SELECT max(cast(ilbo.week AS int)) FROM Table_inventory ilbo) OR  ilbo.week = (SELECT max(cast(ilbo.week AS int)) - (4+48) FROM Table_inventory ilbo) 
+			cast(ibow.week AS int) = (SELECT max(cast(ibow.week AS int)) FROM Table_inventory ibow) OR  ibow.week = (SELECT max(cast(ibow.week AS int)) - (4+48) FROM Table_inventory ibow) 
 		) THEN 'mm_week'
-		WHEN  cast(ilbo.week AS int) = (SELECT max(cast(ilbo.week AS int)) FROM Table_inventory ilbo) OR  ilbo.week = (SELECT max(cast(ilbo.week AS int)) - 4 FROM Table_inventory ilbo) THEN 'mm_week'
+		WHEN  cast(ibow.week AS int) = (SELECT max(cast(ibow.week AS int)) FROM Table_inventory ibow) OR  ibow.week = (SELECT max(cast(ibow.week AS int)) - 4 FROM Table_inventory ibow) THEN 'mm_week'
 		ELSE 'none'
 	END ASmax_min_week_4
 
-    FROM Table_inventory ilbo
+    FROM Table_inventory ibow
 
-    LEFT JOIN MAW
-    ON MAW.item = ilbo.item
-    AND  MAW.region_id = 'EU' AND  
+    LEFT JOIN tita
+    ON tita.item = ibow.item
+    AND  tita.region_id = 'EU' AND  
     CASE 
-        WHEN  ilbo.site IN ('DE78','XD14','XD72' , 'XBER' ,'DE21') THEN MAW.marketplace_id = 'DE'
-        WHEN  ilbo.site IN ('XG32', 'LT62','UKSA','RE32') THEN MAW.marketplace_id = 'UK'
-        WHEN  ilbo.site IN ('DFR1','DFR5') THEN MAW.marketplace_id = 'FR'
-        WHEN  ilbo.site IN ('RE34', 'XITJ','SW78') THEN MAW.marketplace_id = 'IT'
-        WHEN  ilbo.site IN ('AS21','BC32','SA54') THEN MAW.marketplace_id = 'ES'
+        WHEN  ibow.site IN ('DE78','XD14','XD72' , 'XBER' ,'DE21') THEN tita.marketplace_id = 'DE'
+        WHEN  ibow.site IN ('XG32', 'LT62','UKSA','RE32') THEN tita.marketplace_id = 'UK'
+        WHEN  ibow.site IN ('DFR1','DFR5') THEN tita.marketplace_id = 'FR'
+        WHEN  ibow.site IN ('RE34', 'XITJ','SW78') THEN tita.marketplace_id = 'IT'
+        WHEN  ibow.site IN ('AS21','BC32','SA54') THEN tita.marketplace_id = 'ES'
     END
 
     LEFT JOIN IOG_mapping IOG
-    ON ilbo.group_id = IOG.group_id 
+    ON ibow.group_id = IOG.group_id 
     
     LEFT JOIN Sort_table 
-    ON sort_table.item = ilbo.item AND 
+    ON sort_table.item = ibow.item AND 
     CASE 
-        WHEN  ilbo.site IN ('DE78','XD14','XD72' , 'XBER' ,'DE21') THEN sort_table.marketplace_id = 'DE'
-        WHEN  ilbo.site IN ('XG32', 'LT62','UKSA','RE32') THEN sort_table.marketplace_id = 'UK'
-        WHEN  ilbo.site IN ('DFR1','DFR5') THEN sort_table.marketplace_id = 'FR'
-        WHEN  ilbo.site IN ('RE34', 'XITJ','SW78') THEN sort_table.marketplace_id = 'IT'
-        WHEN  ilbo.site IN ('AS21','BC32','PESG','SA54') THEN sort_table.marketplace_id = 'ES'
+        WHEN  ibow.site IN ('DE78','XD14','XD72' , 'XBER' ,'DE21') THEN sort_table.marketplace_id = 'DE'
+        WHEN  ibow.site IN ('XG32', 'LT62','UKSA','RE32') THEN sort_table.marketplace_id = 'UK'
+        WHEN  ibow.site IN ('DFR1','DFR5') THEN sort_table.marketplace_id = 'FR'
+        WHEN  ibow.site IN ('RE34', 'XITJ','SW78') THEN sort_table.marketplace_id = 'IT'
+        WHEN  ibow.site IN ('AS21','BC32','PESG','SA54') THEN sort_table.marketplace_id = 'ES'
     END
