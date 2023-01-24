@@ -1,4 +1,4 @@
-# INVENTORY DEEP DIVE
+# INVENTORY DIVE DEEP
 Pipeline of inventory for country and sites with control for deep diving
 <p>Schemas, Tables, Columns and Values are changed from the original ones to avoid sensitive data being released outside the company</p>
 <p>Tool used:</p>
